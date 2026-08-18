@@ -10,6 +10,7 @@ import './drink-price.css'
 import AuthGate from '@/components/AuthGate'
 import DrinkPriceFeedback from '@/components/DrinkPriceFeedback'
 import AlphabeticalUi from '@/components/AlphabeticalUi'
+import CocktailDbSync from '@/components/CocktailDbSync'
 
 export const metadata: Metadata = {
   title: 'MoBar',
@@ -22,5 +23,5 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="no"><body><AuthGate><DrinkPriceFeedback/><AlphabeticalUi/>{children}</AuthGate></body></html>
+  return <html lang="no"><body><AuthGate><CocktailDbSync/><DrinkPriceFeedback/><AlphabeticalUi/>{children}</AuthGate></body></html>
 }
