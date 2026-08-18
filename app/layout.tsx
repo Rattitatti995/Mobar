@@ -7,6 +7,7 @@ import './product.css'
 import './bottle-fix.css'
 import './branding.css'
 import AuthGate from '@/components/AuthGate'
+import DrinkPriceFeedback from '@/components/DrinkPriceFeedback'
 
 export const metadata: Metadata = {
   title: 'MoBar',
@@ -19,5 +20,5 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="no"><body><AuthGate>{children}</AuthGate></body></html>
+  return <html lang="no"><body><AuthGate><DrinkPriceFeedback/>{children}</AuthGate></body></html>
 }
