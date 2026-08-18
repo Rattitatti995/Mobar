@@ -58,9 +58,16 @@ export default function BottleFormUsability(){
    }
    if(!data.found){
     const kassStatus=String(data.kassalapp_status||'')
+    const vinoStatus=String(data.vinmonopolet_status||'')
     const kassProblem=kassStatus.startsWith('http_')||kassStatus==='exception'
-    const dbText=kassProblem?`Kassalapp-oppslaget feilet (${data.kassalapp_error||kassStatus}), og Open Food Facts kjenner ikke varen.`:data.kassalapp_configured?'Kassalapp og Open Food Facts kjenner ikke varen.':'Open Food Facts kjenner ikke varen ennå.'
-    setLookupStatus(form,`${dbText} Velg type og fyll inn varen én gang. Når du lagrer flasken med denne strekkoden, vil MoBar kjenne den igjen automatisk neste gang.`,kassProblem?'error':'warn')
+    const vinoProblem=vinoStatus.startsWith('http_')||vinoStatus==='exception'
+    const problems=[
+     vinoProblem&&`Vinmonopolet-oppslaget feilet (${data.vinmonopolet_error||vinoStatus})`,
+     kassProblem&&`Kassalapp-oppslaget feilet (${data.kassalapp_error||kassStatus})`,
+    ].filter(Boolean).join(' og ')
+    const sources=[data.vinmonopolet_configured&&'Vinmonopolet',data.kassalapp_configured&&'Kassalapp','Open Food Facts'].filter(Boolean).join(', ')
+    const dbText=problems?`${problems}. De øvrige kildene kjenner heller ikke varen.`:`${sources} kjenner ikke varen ennå.`
+    setLookupStatus(form,`${dbText} Velg type og fyll inn varen én gang. Når du lagrer flasken med denne strekkoden, vil MoBar kjenne den igjen automatisk neste gang.`,kassProblem||vinoProblem?'error':'warn')
     return
    }
    const p=data.product||{}
@@ -81,19 +88,25 @@ export default function BottleFormUsability(){
    if(price&&!price.value&&data.source==='mobar'&&p.purchase_price!==null&&p.purchase_price!==undefined){
     setReactInputValue(price,String(p.purchase_price));priceFilled=true
    }
-   if(price&&!price.value&&data.source==='kassalapp'&&Number(p.market_price)>0){
+   if(price&&!price.value&&(data.source==='kassalapp'||data.source==='vinmonopolet')&&Number(p.market_price)>0){
     setReactInputValue(price,String(Number(p.market_price).toFixed(2)));priceFilled=true
    }
-   const source=data.source==='mobar'?'tidligere registrert flaske i MoBar':data.source==='kassalapp'?'Kassalapp':'Open Food Facts'
+   const source=data.source==='mobar'?'tidligere registrert flaske i MoBar':data.source==='vinmonopolet'?'Vinmonopolet':data.source==='kassalapp'?'Kassalapp':'Open Food Facts'
    const filled=[p.ingredient&&'type',p.brand&&'merke',p.bottle_size_ml&&'størrelse',p.abv!==null&&p.abv!==undefined&&'ABV',priceFilled&&'pris'].filter(Boolean).join(', ')
-   const marketHint=data.source==='kassalapp'&&Number(p.market_price)>0?` Prisfeltet er satt til laveste registrerte butikkpris, ca. ${Number(p.market_price).toLocaleString('nb-NO',{minimumFractionDigits:2,maximumFractionDigits:2})} kr${p.market_store?` hos ${p.market_store}`:''}. Du kan endre den hvis du betalte noe annet.`:''
+   const priceNumber=Number(p.market_price)
+   const marketHint=data.source==='vinmonopolet'&&priceNumber>0?` Prisfeltet er satt til Vinmonopolets pris, ca. ${priceNumber.toLocaleString('nb-NO',{minimumFractionDigits:2,maximumFractionDigits:2})} kr. Du kan endre den hvis du betalte noe annet.`:data.source==='kassalapp'&&priceNumber>0?` Prisfeltet er satt til laveste registrerte butikkpris, ca. ${priceNumber.toLocaleString('nb-NO',{minimumFractionDigits:2,maximumFractionDigits:2})} kr${p.market_store?` hos ${p.market_store}`:''}. Du kan endre den hvis du betalte noe annet.`:''
    const kassStatus=String(data.kassalapp_status||'')
-   const kassFallback=data.source==='openfoodfacts'&&(kassStatus.startsWith('http_')||kassStatus==='exception')?` Kassalapp feilet (${data.kassalapp_error||kassStatus}), så MoBar brukte Open Food Facts som reserve.`:''
+   const vinoStatus=String(data.vinmonopolet_status||'')
+   const fallbackProblems=data.source==='openfoodfacts'?[
+    (vinoStatus.startsWith('http_')||vinoStatus==='exception')&&`Vinmonopolet feilet (${data.vinmonopolet_error||vinoStatus})`,
+    (kassStatus.startsWith('http_')||kassStatus==='exception')&&`Kassalapp feilet (${data.kassalapp_error||kassStatus})`,
+   ].filter(Boolean):[]
+   const upstreamFallback=fallbackProblems.length?` ${fallbackProblems.join(' og ')}, så MoBar brukte Open Food Facts som reserve.`:''
    if(data.source!=='mobar'&&!p.ingredient){
     const name=p.name?` (${p.name})`:''
-    setLookupStatus(form,`Varen ble funnet i ${source}${name}, men MoBar kunne ikke avgjøre flasketypen sikkert. Velg riktig type manuelt og kontroller resten før du lagrer.${marketHint}${kassFallback}`,'warn')
+    setLookupStatus(form,`Varen ble funnet i ${source}${name}, men MoBar kunne ikke avgjøre flasketypen sikkert. Velg riktig type manuelt og kontroller resten før du lagrer.${marketHint}${upstreamFallback}`,'warn')
    }else{
-    setLookupStatus(form,`Vare funnet fra ${source}${filled?` · fylte inn ${filled}`:''}. Kontroller opplysningene før du lagrer.${marketHint}${kassFallback}`,(kassFallback?'warn':'ok'))
+    setLookupStatus(form,`Vare funnet fra ${source}${filled?` · fylte inn ${filled}`:''}. Kontroller opplysningene før du lagrer.${marketHint}${upstreamFallback}`,(upstreamFallback?'warn':'ok'))
    }
   }
 
