@@ -1,0 +1,9 @@
+/* Bottle group usability fix */
+.bottle .expandbtn{width:auto!important;min-width:92px!important;height:34px!important;border:1px solid #3a342e!important;border-radius:4px!important;padding:0 9px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;color:#c79a6b!important;background:#1b1916!important}
+.bottle .expandbtn:before{content:'Vis flasker';font-size:9px;letter-spacing:.5px;white-space:nowrap}
+.bottle .expandbtn:has(svg.rotated):before{content:'Skjul'}
+.individual.individual-v2{grid-template-columns:minmax(110px,1fr) auto 30px 30px minmax(48px,auto) 30px 30px!important;gap:6px!important}
+.individual-v2 .statebtn{width:auto!important;min-width:48px!important;padding:0 7px!important;font-size:9px!important;color:#d4a16e!important;border-color:#5a4431!important}
+.individual-v2 .editbtn{width:30px!important;height:30px!important;background:#1d1b18!important;border:1px solid #302d29!important;color:#b6aaa0!important;display:grid!important;place-items:center!important}
+.individual-v2 .editbtn:hover,.individual-v2 .statebtn:hover{border-color:#a87549!important;color:#efbd87!important}
+@media(max-width:700px){.individual.individual-v2{grid-template-columns:1fr 30px 30px 52px 30px 30px!important}.individual-v2>.warn{display:none}.individual-v2>div{grid-column:1/-1}.bottle .expandbtn{min-width:80px!important}.bottle .expandbtn:before{content:'Flasker'}}
