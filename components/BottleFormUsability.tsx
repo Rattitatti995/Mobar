@@ -122,8 +122,7 @@ export default function BottleFormUsability(){
   function enhance(){
    if(disposed)return
    for(const form of [...document.querySelectorAll<HTMLFormElement>('form.formmodal')]){
-    const heading=form.querySelector('h2')?.textContent||''
-    if(!/flaske/i.test(heading))continue
+    if(!form.querySelector('#ingredient-list'))continue
     enhanceIngredient(form)
     enhanceBarcode(form)
    }
