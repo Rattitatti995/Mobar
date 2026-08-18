@@ -53,11 +53,11 @@ export default function BottleFormUsability(){
    setLookupStatus(form,'Slår opp varen…','busy')
    const{data,error}=await supabase.functions.invoke('lookup-barcode',{body:{barcode}})
    if(error||!data?.ok){
-    setLookupStatus(form,`Kunne ikke slå opp varen: ${error?.message||data?.error||'ukjent feil'}. Strekkoden er fortsatt lagret.`,'error')
+    setLookupStatus(form,`Kunne ikke slå opp varen: ${error?.message||data?.error||'ukjent feil'}. Strekkoden blir fortsatt lagret hvis du lagrer flasken.`,'error')
     return
    }
    if(!data.found){
-    setLookupStatus(form,'Strekkoden er lest, men varen finnes ikke i produktdatabasen. Fyll inn feltene manuelt.','warn')
+    setLookupStatus(form,'Strekkoden ble lest, men produktdatabasen kjenner ikke varen. Velg type og fyll inn varen én gang. Når du lagrer flasken med denne strekkoden, vil MoBar kjenne den igjen automatisk neste gang.','warn')
     return
    }
    const p=data.product||{}
@@ -77,7 +77,12 @@ export default function BottleFormUsability(){
    if(price&&data.source==='mobar'&&p.purchase_price!==null&&p.purchase_price!==undefined&&!price.value)setReactInputValue(price,String(p.purchase_price))
    const source=data.source==='mobar'?'tidligere registrert flaske i MoBar':'Open Food Facts'
    const filled=[p.ingredient&&'type',p.brand&&'merke',p.bottle_size_ml&&'størrelse',p.abv!==null&&p.abv!==undefined&&'ABV'].filter(Boolean).join(', ')
-   setLookupStatus(form,`Vare funnet fra ${source}${filled?` · fylte inn ${filled}`:''}. Kontroller opplysningene før du lagrer.`,'ok')
+   if(data.source!=='mobar'&&!p.ingredient){
+    const name=p.name?` (${p.name})`:''
+    setLookupStatus(form,`Varen ble funnet i Open Food Facts${name}, men MoBar kunne ikke avgjøre flasketypen sikkert. Velg riktig type manuelt og kontroller resten før du lagrer.`,'warn')
+   }else{
+    setLookupStatus(form,`Vare funnet fra ${source}${filled?` · fylte inn ${filled}`:''}. Kontroller opplysningene før du lagrer.`,'ok')
+   }
   }
 
   async function openScanner(input:HTMLInputElement){
@@ -129,7 +134,8 @@ export default function BottleFormUsability(){
    const label=input.closest('label')
    const list=form.querySelector<HTMLDataListElement>('#ingredient-list')
    if(!label||!list||label.querySelector('.ingredient-picker'))return
-   const options=[...new Set([...list.querySelectorAll('option')].map(o=>o.value).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'nb',{sensitivity:'base'}))
+   const base=[...list.querySelectorAll('option')].map(o=>o.value).filter(Boolean)
+   const options=[...new Set(['Saft',...base])].sort((a,b)=>a.localeCompare(b,'nb',{sensitivity:'base'}))
    input.required=false
    input.classList.add('ingredient-react-input')
    input.style.display='none'
@@ -139,7 +145,7 @@ export default function BottleFormUsability(){
    const search=document.createElement('input')
    search.type='search'
    search.className='ingredient-search'
-   search.placeholder='Søk flasketype, f.eks. vodka eller akevitt…'
+   search.placeholder='Søk flasketype, f.eks. vodka, saft eller akevitt…'
    search.autocomplete='off'
    search.value=input.value
    search.setAttribute('aria-label','Søk flasketype / ingrediens')
