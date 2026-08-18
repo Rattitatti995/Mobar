@@ -60,8 +60,8 @@ function ingredientFromOptions(form:HTMLFormElement,product:any){
  if(!hay)return ''
  const options=[...list.querySelectorAll('option')].map(o=>o.value.trim()).filter(Boolean)
  const ranked=options
-  .map(value=>({value,n: norm(value)}))
-  .filter(x=>x.n.length>=3&&(` ${hay} `.includes(` ${x.n} `)||hay.includes(x.n)))
+  .map(value=>({value,n:norm(value)}))
+  .filter(x=>x.n.length>=3&&` ${hay} `.includes(` ${x.n} `))
   .sort((a,b)=>b.n.length-a.n.length)
  return ranked[0]?.value||''
 }
