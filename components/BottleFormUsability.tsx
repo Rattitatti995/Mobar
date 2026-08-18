@@ -98,6 +98,7 @@ export default function BottleFormUsability(){
   let stream:MediaStream|null=null
   let scanTimer:number|undefined
   let disposed=false
+  let lookupRequest=0
 
   function closeScanner(){
    if(scanTimer)window.clearInterval(scanTimer)
@@ -115,7 +116,6 @@ export default function BottleFormUsability(){
   }
 
   function setIngredient(form:HTMLFormElement,value:string){
-   if(!value)return
    const original=[...form.querySelectorAll<HTMLInputElement>('input')].find(i=>i.getAttribute('list')==='ingredient-list')
    if(original)setReactInputValue(original,value)
    const search=form.querySelector<HTMLInputElement>('.ingredient-search')
@@ -123,17 +123,35 @@ export default function BottleFormUsability(){
    form.querySelector<HTMLElement>('.ingredient-results')?.setAttribute('hidden','')
   }
 
+  function clearPreviousLookup(form:HTMLFormElement){
+   setIngredient(form,'')
+   const brand=labelInput(form,'Merke')
+   const size=labelInput(form,'Flaskestørrelse')
+   const remaining=labelInput(form,'Igjen')
+   const price=labelInput(form,'Pris')
+   const abv=labelInput(form,'ABV')
+   if(brand)setReactInputValue(brand,'')
+   if(size)setReactInputValue(size,'')
+   if(price)setReactInputValue(price,'')
+   if(abv)setReactInputValue(abv,'')
+   const editing=/oppdater/i.test(form.querySelector('h2')?.textContent||'')
+   if(remaining&&!editing)setReactInputValue(remaining,'')
+  }
+
   async function lookupBarcode(input:HTMLInputElement){
    const form=input.closest('form') as HTMLFormElement|null
    if(!form)return
    const barcode=input.value.replace(/\D/g,'')
    if(barcode.length<6){setLookupStatus(form,'Skriv inn eller skann en gyldig strekkode.','warn');return}
+   const requestId=++lookupRequest
    setLookupStatus(form,'Slår opp varen…','busy')
    const{data,error}=await supabase.functions.invoke('lookup-barcode',{body:{barcode}})
+   if(requestId!==lookupRequest)return
    if(error||!data?.ok){
     setLookupStatus(form,`Kunne ikke slå opp varen: ${error?.message||data?.error||'ukjent feil'}. Strekkoden blir fortsatt lagret hvis du lagrer flasken.`,'error')
     return
    }
+   clearPreviousLookup(form)
    if(!data.found){
     const kassStatus=String(data.kassalapp_status||'')
     const vinoStatus=String(data.vinmonopolet_status||'')
@@ -165,10 +183,10 @@ export default function BottleFormUsability(){
    if(abv&&p.abv!==null&&p.abv!==undefined)setReactInputValue(abv,String(p.abv))
    const price=labelInput(form,'Pris')
    let priceFilled=false
-   if(price&&!price.value&&data.source==='mobar'&&p.purchase_price!==null&&p.purchase_price!==undefined){
+   if(price&&data.source==='mobar'&&p.purchase_price!==null&&p.purchase_price!==undefined){
     setReactInputValue(price,String(p.purchase_price));priceFilled=true
    }
-   if(price&&!price.value&&(data.source==='kassalapp'||data.source==='vinmonopolet')&&Number(p.market_price)>0){
+   if(price&&(data.source==='kassalapp'||data.source==='vinmonopolet')&&Number(p.market_price)>0){
     setReactInputValue(price,String(Number(p.market_price).toFixed(2)));priceFilled=true
    }
    const source=data.source==='mobar'?'tidligere registrert flaske i MoBar':data.source==='vinmonopolet'?'Vinmonopolet':data.source==='kassalapp'?'Kassalapp':'Open Food Facts'
