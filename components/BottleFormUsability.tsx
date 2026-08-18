@@ -15,6 +15,19 @@ function labelInput(form:HTMLFormElement,prefix:string){
  return label?.querySelector('input') as HTMLInputElement|null
 }
 
+function lookupIngredient(product:any){
+ if(product?.ingredient)return String(product.ingredient)
+ const text=`${product?.name||''} ${product?.brand||''}`.toLocaleLowerCase('nb-NO')
+ if(/\bpisang\s+ambon\b/.test(text))return 'Pisang Ambon'
+ return ''
+}
+
+function lookupBrand(product:any,ingredient:string){
+ if(product?.brand)return String(product.brand).split(',')[0].trim()
+ if(ingredient==='Pisang Ambon')return 'Pisang Ambon'
+ return ''
+}
+
 export default function BottleFormUsability(){
  useEffect(()=>{
   let stream:MediaStream|null=null
@@ -71,9 +84,11 @@ export default function BottleFormUsability(){
     return
    }
    const p=data.product||{}
-   if(p.ingredient)setIngredient(form,String(p.ingredient))
+   const ingredient=lookupIngredient(p)
+   const inferredBrand=lookupBrand(p,ingredient)
+   if(ingredient)setIngredient(form,ingredient)
    const brand=labelInput(form,'Merke')
-   if(brand&&p.brand)setReactInputValue(brand,String(p.brand).split(',')[0].trim())
+   if(brand&&inferredBrand)setReactInputValue(brand,inferredBrand)
    const size=labelInput(form,'Flaskestørrelse')
    const remaining=labelInput(form,'Igjen')
    if(size&&p.bottle_size_ml){
@@ -92,7 +107,7 @@ export default function BottleFormUsability(){
     setReactInputValue(price,String(Number(p.market_price).toFixed(2)));priceFilled=true
    }
    const source=data.source==='mobar'?'tidligere registrert flaske i MoBar':data.source==='vinmonopolet'?'Vinmonopolet':data.source==='kassalapp'?'Kassalapp':'Open Food Facts'
-   const filled=[p.ingredient&&'type',p.brand&&'merke',p.bottle_size_ml&&'størrelse',p.abv!==null&&p.abv!==undefined&&'ABV',priceFilled&&'pris'].filter(Boolean).join(', ')
+   const filled=[ingredient&&'type',inferredBrand&&'merke',p.bottle_size_ml&&'størrelse',p.abv!==null&&p.abv!==undefined&&'ABV',priceFilled&&'pris'].filter(Boolean).join(', ')
    const priceNumber=Number(p.market_price)
    const marketHint=data.source==='vinmonopolet'&&priceNumber>0?` Prisfeltet er satt til Vinmonopolets pris, ca. ${priceNumber.toLocaleString('nb-NO',{minimumFractionDigits:2,maximumFractionDigits:2})} kr. Du kan endre den hvis du betalte noe annet.`:data.source==='kassalapp'&&priceNumber>0?` Prisfeltet er satt til laveste registrerte butikkpris, ca. ${priceNumber.toLocaleString('nb-NO',{minimumFractionDigits:2,maximumFractionDigits:2})} kr${p.market_store?` hos ${p.market_store}`:''}. Du kan endre den hvis du betalte noe annet.`:''
    const kassStatus=String(data.kassalapp_status||'')
@@ -102,7 +117,7 @@ export default function BottleFormUsability(){
     (kassStatus.startsWith('http_')||kassStatus==='exception')&&`Kassalapp feilet (${data.kassalapp_error||kassStatus})`,
    ].filter(Boolean):[]
    const upstreamFallback=fallbackProblems.length?` ${fallbackProblems.join(' og ')}, så MoBar brukte Open Food Facts som reserve.`:''
-   if(data.source!=='mobar'&&!p.ingredient){
+   if(data.source!=='mobar'&&!ingredient){
     const name=p.name?` (${p.name})`:''
     setLookupStatus(form,`Varen ble funnet i ${source}${name}, men MoBar kunne ikke avgjøre flasketypen sikkert. Velg riktig type manuelt og kontroller resten før du lagrer.${marketHint}${upstreamFallback}`,'warn')
    }else{
@@ -160,7 +175,7 @@ export default function BottleFormUsability(){
    const list=form.querySelector<HTMLDataListElement>('#ingredient-list')
    if(!label||!list||label.querySelector('.ingredient-picker'))return
    const base=[...list.querySelectorAll('option')].map(o=>o.value).filter(Boolean)
-   const options=[...new Set(['Saft',...base])].sort((a,b)=>a.localeCompare(b,'nb',{sensitivity:'base'}))
+   const options=[...new Set(['Saft','Pisang Ambon',...base])].sort((a,b)=>a.localeCompare(b,'nb',{sensitivity:'base'}))
    input.required=false
    input.classList.add('ingredient-react-input')
    input.style.display='none'
