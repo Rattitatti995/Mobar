@@ -4,6 +4,7 @@ import './auth.css'
 import './v2.css'
 import './features.css'
 import './product.css'
+import './bottle-fix.css'
 import AuthGate from '@/components/AuthGate'
 
 export const metadata: Metadata = {
