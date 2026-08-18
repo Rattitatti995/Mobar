@@ -1,0 +1,13 @@
+.vinmonopolet-linker{margin-top:.7rem;padding:.75rem;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(255,255,255,.035)}
+.vino-open,.vino-do-search{border:0;border-radius:9px;padding:.6rem .85rem;font:inherit;font-weight:700;cursor:pointer}
+.vino-open{width:100%;background:rgba(255,255,255,.1);color:inherit}
+.vino-search-area{margin-top:.65rem}
+.vino-search-row{display:flex;gap:.5rem}
+.vino-query{min-width:0;flex:1;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:.65rem .75rem;background:rgba(0,0,0,.16);color:inherit;font:inherit}
+.vino-do-search{flex:0 0 auto}
+.vino-results{display:grid;gap:.45rem;margin-top:.6rem;max-height:310px;overflow:auto}
+.vino-result{display:flex;flex-direction:column;gap:.18rem;width:100%;text-align:left;border:1px solid rgba(255,255,255,.11);border-radius:9px;padding:.65rem .75rem;background:rgba(255,255,255,.055);color:inherit;cursor:pointer}
+.vino-result:hover{background:rgba(255,255,255,.1)}
+.vino-result strong{font-size:.95rem}
+.vino-result span,.vino-empty{font-size:.8rem;opacity:.72}
+@media(max-width:560px){.vino-search-row{flex-direction:column}.vino-do-search{width:100%}}
