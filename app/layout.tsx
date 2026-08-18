@@ -6,6 +6,7 @@ import './features.css'
 import './product.css'
 import './bottle-fix.css'
 import './branding.css'
+import './drink-price.css'
 import AuthGate from '@/components/AuthGate'
 import DrinkPriceFeedback from '@/components/DrinkPriceFeedback'
 
