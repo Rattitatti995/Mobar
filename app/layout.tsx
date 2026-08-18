@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import './bottle-form.css'
+import BottleFormUsability from '@/components/BottleFormUsability'
 
 export const metadata: Metadata = {
   title: 'MoBar',
@@ -12,5 +14,5 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="no"><body>{children}</body></html>
+  return <html lang="no"><body><BottleFormUsability/>{children}</body></html>
 }
