@@ -1,6 +1,6 @@
 'use client'
 
-import {FormEvent,useEffect,useMemo,useState} from 'react'
+import {FormEvent,useEffect,useMemo,useRef,useState} from 'react'
 import {AlertTriangle,BarChart3,ChevronDown,Edit3,FlaskConical,GlassWater,Heart,History,LogOut,Minus,Plus,Search,ShoppingCart,Sparkles,Trash2,Wine,X} from 'lucide-react'
 import {supabase} from '@/lib/supabase'
 import {COCKTAIL_CATALOG,CatalogCocktail} from '@/lib/cocktailCatalog'
@@ -21,6 +21,9 @@ export default function Page(){
  const [tab,setTab]=useState<'drinks'|'bar'|'shop'|'stats'>('drinks')
  const [q,setQ]=useState('')
  const [msg,setMsg]=useState('')
+ const [searchOpen,setSearchOpen]=useState(false)
+ const [activeSuggestion,setActiveSuggestion]=useState(-1)
+ const searchRef=useRef<HTMLDivElement|null>(null)
  const [bOpen,setBOpen]=useState(false)
  const [cOpen,setCOpen]=useState(false)
  const [bf,setBf]=useState(EMPTY)
@@ -44,6 +47,11 @@ export default function Page(){
   setPours((pd||[]) as Pour[])
  }
  useEffect(()=>{load()},[])
+ useEffect(()=>{
+  const close=(e:MouseEvent)=>{if(searchRef.current&&!searchRef.current.contains(e.target as Node)){setSearchOpen(false);setActiveSuggestion(-1)}}
+  document.addEventListener('mousedown',close)
+  return()=>document.removeEventListener('mousedown',close)
+ },[])
 
  const totals=useMemo(()=>Object.fromEntries([...new Set(bottles.map(x=>x.ingredient))].map(i=>[i,bottles.filter(x=>x.ingredient===i).reduce((s,x)=>s+Number(x.remaining_ml),0)])),[bottles])
  const pricePerMl=useMemo(()=>Object.fromEntries([...new Set(bottles.map(x=>x.ingredient))].map(i=>{const x=bottles.filter(v=>v.ingredient===i&&v.purchase_price);return[i,x.length?x.reduce((s,z)=>s+Number(z.purchase_price)/Number(z.bottle_size_ml),0)/x.length:0]})),[bottles])
@@ -53,54 +61,48 @@ export default function Page(){
  const cost=(x:{ingredients:Ingredient[]})=>x.ingredients.reduce((s,i)=>s+(pricePerMl[i.ingredient]||0)*i.amount_ml,0)
  const abv=(x:{ingredients:Ingredient[]})=>{const vol=x.ingredients.reduce((s,i)=>s+i.amount_ml,0);return vol?x.ingredients.reduce((s,i)=>s+i.amount_ml*((abvByIng[i.ingredient]||0)/100),0)/vol*100:0}
  const filtered=cocktails.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase()))
- const suggestions=useMemo(()=>{const s=new Set(cocktails.map(x=>x.name.toLowerCase()));return q?COCKTAIL_CATALOG.filter(x=>x.name.toLowerCase().includes(q.toLowerCase())).slice(0,8).map(x=>({...x,saved:s.has(x.name.toLowerCase())})):[]},[q,cocktails])
+ const suggestions=useMemo(()=>{const s=new Set(cocktails.map(x=>x.name.toLowerCase()));return q.trim()?COCKTAIL_CATALOG.filter(x=>x.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0,8).map(x=>({...x,saved:s.has(x.name.toLowerCase())})):[]},[q,cocktails])
  const groups=useMemo(()=>{const m=new Map<string,Bottle[]>();bottles.forEach(x=>{const k=[x.ingredient,(x.brand||''),x.bottle_size_ml].join('|').toLowerCase();m.set(k,[...(m.get(k)||[]),x])});return [...m.entries()]},[bottles])
  const low=bottles.filter(x=>Number(x.remaining_ml)<=Number(x.low_at_ml))
  const unlocks=useMemo(()=>{const out:Record<string,number>={};for(const d of COCKTAIL_CATALOG){const m=d.ingredients.filter(i=>(totals[i.ingredient]||0)<i.amount_ml);if(m.length===1)out[m[0].ingredient]=(out[m[0].ingredient]||0)+1}return Object.entries(out).sort((a,b)=>b[1]-a[1]).slice(0,5)},[totals])
  const top=useMemo(()=>{const m:Record<string,number>={};pours.forEach(x=>m[x.cocktail_name]=(m[x.cocktail_name]||0)+1);return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,5)},[pours])
  const flash=(s:string)=>{setMsg(s);setTimeout(()=>setMsg(''),2800)}
 
+ async function chooseSuggestion(x:CatalogCocktail&{saved:boolean}){
+  setSearchOpen(false);setActiveSuggestion(-1)
+  if(x.saved){setQ(x.name);return}
+  await addCatalog(x)
+ }
+ function onSearchKeyDown(e:React.KeyboardEvent<HTMLInputElement>){
+  if(e.key==='Escape'){setSearchOpen(false);setActiveSuggestion(-1);return}
+  if(!searchOpen||!suggestions.length){if((e.key==='ArrowDown'||e.key==='ArrowUp')&&suggestions.length){e.preventDefault();setSearchOpen(true);setActiveSuggestion(e.key==='ArrowDown'?0:suggestions.length-1)}return}
+  if(e.key==='ArrowDown'){e.preventDefault();setActiveSuggestion(i=>i>=suggestions.length-1?0:i+1)}
+  else if(e.key==='ArrowUp'){e.preventDefault();setActiveSuggestion(i=>i<=0?suggestions.length-1:i-1)}
+  else if(e.key==='Enter'&&activeSuggestion>=0){e.preventDefault();chooseSuggestion(suggestions[activeSuggestion])}
+ }
  async function addCatalog(x:CatalogCocktail){
-  if(cocktails.some(y=>y.name.toLowerCase()===x.name.toLowerCase())){setQ(x.name);return}
+  if(cocktails.some(y=>y.name.toLowerCase()===x.name.toLowerCase())){setQ(x.name);setSearchOpen(false);return}
   const{data,error}=await supabase.from('bar_cocktails').insert({name:x.name,description:x.description}).select('id').single()
   if(error||!data)return flash(error?.message||'Kunne ikke lagre')
   const{error:e}=await supabase.from('bar_recipe_ingredients').insert(x.ingredients.map(i=>({...i,cocktail_id:data.id})))
   if(e)return flash(e.message)
-  await load();setQ(x.name);flash(`${x.name} lagt til`)
+  await load();setQ(x.name);setSearchOpen(false);flash(`${x.name} lagt til`)
  }
  async function make(x:Cocktail){const{error}=await supabase.rpc('make_cocktail',{p_cocktail_id:x.id});if(error)return flash(error.message);await load();flash(`${x.name} laget · lageret er oppdatert`)}
  async function favorite(x:Cocktail){await supabase.from('bar_cocktails').update({is_favorite:!x.is_favorite}).eq('id',x.id);await load()}
 
  function openMissing(x:Cocktail){
-  const rows=missing(x).map(i=>{
-   const existing=bottles.find(b=>b.ingredient===i.ingredient)
-   return {ingredient:i.ingredient,needed:i.amount_ml,have:totals[i.ingredient]||0,add_ml:existing?Math.max(Math.ceil(i.missing_ml),100):700,brand:existing?.brand||'',bottle_size_ml:existing?.bottle_size_ml||700,price:existing?.purchase_price?.toString()||'',abv:existing?.abv?.toString()||'',selected:true}
-  })
+  const rows=missing(x).map(i=>{const existing=bottles.find(b=>b.ingredient===i.ingredient);return {ingredient:i.ingredient,needed:i.amount_ml,have:totals[i.ingredient]||0,add_ml:existing?Math.max(Math.ceil(i.missing_ml),100):700,brand:existing?.brand||'',bottle_size_ml:existing?.bottle_size_ml||700,price:existing?.purchase_price?.toString()||'',abv:existing?.abv?.toString()||'',selected:true}})
   setMissingCocktail(x);setMissingRows(rows)
  }
- async function addMissingIngredients(){
-  const chosen=missingRows.filter(r=>r.selected&&r.add_ml>0)
-  if(!chosen.length)return flash('Velg minst én ingrediens')
-  const rows=chosen.map(r=>({ingredient:r.ingredient,brand:r.brand||null,bottle_size_ml:Math.max(r.bottle_size_ml,r.add_ml),remaining_ml:r.add_ml,low_at_ml:150,is_open:true,purchase_price:r.price?Number(r.price):null,abv:r.abv?Number(r.abv):null}))
-  const{error}=await supabase.from('bar_bottles').insert(rows)
-  if(error)return flash(error.message)
-  setMissingCocktail(null);setMissingRows([]);await load();flash(`${chosen.length} ingrediens${chosen.length===1?'':'er'} lagt til i baren`)
- }
+ async function addMissingIngredients(){const chosen=missingRows.filter(r=>r.selected&&r.add_ml>0);if(!chosen.length)return flash('Velg minst én ingrediens');const rows=chosen.map(r=>({ingredient:r.ingredient,brand:r.brand||null,bottle_size_ml:Math.max(r.bottle_size_ml,r.add_ml),remaining_ml:r.add_ml,low_at_ml:150,is_open:true,purchase_price:r.price?Number(r.price):null,abv:r.abv?Number(r.abv):null}));const{error}=await supabase.from('bar_bottles').insert(rows);if(error)return flash(error.message);setMissingCocktail(null);setMissingRows([]);await load();flash(`${chosen.length} ingrediens${chosen.length===1?'':'er'} lagt til i baren`)}
 
  async function addBottle(e:FormEvent){e.preventDefault();const ing=bf.ingredient==='__other__'?custom.trim():bf.ingredient;if(!ing)return;const{error}=await supabase.from('bar_bottles').insert({ingredient:ing,brand:bf.brand||null,bottle_size_ml:+bf.bottle_size_ml,remaining_ml:+bf.remaining_ml,low_at_ml:+bf.low_at_ml,is_open:bf.is_open,purchase_price:bf.purchase_price?+bf.purchase_price:null,abv:bf.abv?+bf.abv:null,barcode:bf.barcode||null});if(error)return flash(error.message);setBf(EMPTY);setCustom('');setBOpen(false);await load();flash('Flasken er registrert')}
  async function adjust(x:Bottle,d:number){const v=Math.max(0,Math.min(+x.bottle_size_ml,+x.remaining_ml+d));await supabase.from('bar_bottles').update({remaining_ml:v,is_open:true}).eq('id',x.id);await load()}
  async function toggleOpen(x:Bottle){await supabase.from('bar_bottles').update({is_open:!x.is_open}).eq('id',x.id);await load()}
  async function delBottle(id:string){await supabase.from('bar_bottles').delete().eq('id',id);await load()}
  function openEdit(x:Bottle){setEditBottle(x);setEditForm({remaining_ml:String(x.remaining_ml),bottle_size_ml:String(x.bottle_size_ml),low_at_ml:String(x.low_at_ml),purchase_price:x.purchase_price?.toString()||'',abv:x.abv?.toString()||'',brand:x.brand||'',barcode:x.barcode||'',is_open:x.is_open})}
- async function saveEdit(e:FormEvent){
-  e.preventDefault();if(!editBottle)return
-  const size=Number(editForm.bottle_size_ml),remaining=Number(editForm.remaining_ml)
-  if(size<=0||remaining<0||remaining>size)return flash('Sjekk flaske- og restmengde')
-  const{error}=await supabase.from('bar_bottles').update({brand:editForm.brand||null,bottle_size_ml:size,remaining_ml:remaining,low_at_ml:Math.max(0,Number(editForm.low_at_ml)),purchase_price:editForm.purchase_price?Number(editForm.purchase_price):null,abv:editForm.abv?Number(editForm.abv):null,barcode:editForm.barcode||null,is_open:editForm.is_open}).eq('id',editBottle.id)
-  if(error)return flash(error.message)
-  setEditBottle(null);await load();flash('Flasken er oppdatert')
- }
-
+ async function saveEdit(e:FormEvent){e.preventDefault();if(!editBottle)return;const size=Number(editForm.bottle_size_ml),remaining=Number(editForm.remaining_ml);if(size<=0||remaining<0||remaining>size)return flash('Sjekk flaske- og restmengde');const{error}=await supabase.from('bar_bottles').update({brand:editForm.brand||null,bottle_size_ml:size,remaining_ml:remaining,low_at_ml:Math.max(0,Number(editForm.low_at_ml)),purchase_price:editForm.purchase_price?Number(editForm.purchase_price):null,abv:editForm.abv?Number(editForm.abv):null,barcode:editForm.barcode||null,is_open:editForm.is_open}).eq('id',editBottle.id);if(error)return flash(error.message);setEditBottle(null);await load();flash('Flasken er oppdatert')}
  async function addOwn(e:FormEvent){e.preventDefault();if(!cn||!recipe.some(x=>x.ingredient&&x.amount_ml>0))return;const{data,error}=await supabase.from('bar_cocktails').insert({name:cn,description:cd||null,instructions:ci||null,garnish:cg||null,glass:cglass||null}).select('id').single();if(error||!data)return flash(error?.message||'Kunne ikke lagre');await supabase.from('bar_recipe_ingredients').insert(recipe.filter(x=>x.ingredient&&x.amount_ml>0).map(x=>({...x,cocktail_id:data.id})));setCn('');setCd('');setCi('');setCg('');setCglass('');setRecipe([{ingredient:'',amount_ml:40}]);setCOpen(false);await load()}
 
  return <main>
@@ -110,16 +112,9 @@ export default function Page(){
   {msg&&<div className="notice">{msg}</div>}
 
   {tab==='drinks'&&<section className="content">
-   <div className="searchwrap"><div className="search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Søk drink, f.eks. Long Island…"/>{q&&<button onClick={()=>setQ('')}><X/></button>}</div>{suggestions.length>0&&<div className="suggestions">{suggestions.map(x=><button key={x.name} onClick={()=>addCatalog(x)}><GlassWater/><span><b>{x.name}</b><small>{x.description}</small></span><em>{x.saved?'I samlingen':'Legg til'}</em></button>)}</div>}</div>
+   <div className="searchwrap" ref={searchRef}><div className="search"><Search/><input role="combobox" aria-expanded={searchOpen&&suggestions.length>0} aria-controls="cocktail-suggestions" aria-activedescendant={activeSuggestion>=0?`suggestion-${activeSuggestion}`:undefined} value={q} onFocus={()=>{if(q.trim())setSearchOpen(true)}} onChange={e=>{setQ(e.target.value);setSearchOpen(Boolean(e.target.value.trim()));setActiveSuggestion(-1)}} onKeyDown={onSearchKeyDown} placeholder="Søk drink, f.eks. Long Island…" autoComplete="off"/>{q&&<button aria-label="Tøm søk" onClick={()=>{setQ('');setSearchOpen(false);setActiveSuggestion(-1)}}><X/></button>}</div>{searchOpen&&suggestions.length>0&&<div className="suggestions" id="cocktail-suggestions" role="listbox">{suggestions.map((x,i)=><button id={`suggestion-${i}`} role="option" aria-selected={i===activeSuggestion} className={i===activeSuggestion?'activeSuggestion':''} key={x.name} onMouseEnter={()=>setActiveSuggestion(i)} onClick={()=>chooseSuggestion(x)}><GlassWater/><span><b>{x.name}</b><small>{x.description}</small></span><em>{x.saved?'I samlingen':'Legg til'}</em></button>)}</div>}</div>
    <div className="sectionTitle"><div><h2>{q?'Søkeresultater':'Mine cocktails'}</h2><span>{cocktails.filter(x=>count(x)>0).length} kan lages nå</span></div><button className="addbtn" onClick={()=>setCOpen(true)}><Plus/>Egen cocktail</button></div>
-   <div className="grid">{filtered.map(x=>{const n=count(x),miss=missing(x),kr=cost(x),pct=abv(x);return <article className={'card smartcard '+(!n?'cardclickable':'')} key={x.id} onClick={()=>!n&&openMissing(x)}>
-    <div className="drinkIcon"><GlassWater/></div><div className="cardbody"><div className="cardtop"><h3>{x.name}</h3><button className={'heart '+(x.is_favorite?'on':'')} onClick={e=>{e.stopPropagation();favorite(x)}}><Heart/></button></div><p>{x.description}</p>
-    <div className="smartline"><strong>{n>0?`${n} ${n===1?'drink':'drinker'} mulig`:`Mangler ${miss.length}`}</strong>{pct>0&&<span>≈ {pct.toFixed(1)}% ABV</span>}{kr>0&&<span>≈ {kr.toFixed(0)} kr</span>}</div>
-    {miss.length>0&&<div className="missingline">{miss.slice(0,3).map(i=><span key={i.ingredient}>{i.ingredient} +{Math.ceil(i.missing_ml)} ml</span>)}</div>}
-    <div className="ingredients">{x.ingredients.map((i,n)=><span key={n} className={(totals[i.ingredient]||0)<i.amount_ml?'bad':''}>{i.ingredient} <b>{i.amount_ml} ml</b></span>)}</div>
-    {(x.glass||x.garnish||x.instructions)&&<details className="recipeDetails" onClick={e=>e.stopPropagation()}><summary>Oppskrift</summary>{x.glass&&<p><b>Glass:</b> {x.glass}</p>}{x.garnish&&<p><b>Garnityr:</b> {x.garnish}</p>}{x.instructions&&<p>{x.instructions}</p>}</details>}
-    {n>0?<button className="make" onClick={e=>{e.stopPropagation();make(x)}}>Lag drinken <span>· trekk automatisk fra flaskene</span></button>:<button className="missingbtn" onClick={e=>{e.stopPropagation();openMissing(x)}}><Plus/>Se og legg til det som mangler</button>}
-    </div></article>})}</div>
+   <div className="grid">{filtered.map(x=>{const n=count(x),miss=missing(x),kr=cost(x),pct=abv(x);return <article className={'card smartcard '+(!n?'cardclickable':'')} key={x.id} onClick={()=>!n&&openMissing(x)}><div className="drinkIcon"><GlassWater/></div><div className="cardbody"><div className="cardtop"><h3>{x.name}</h3><button className={'heart '+(x.is_favorite?'on':'')} onClick={e=>{e.stopPropagation();favorite(x)}}><Heart/></button></div><p>{x.description}</p><div className="smartline"><strong>{n>0?`${n} ${n===1?'drink':'drinker'} mulig`:`Mangler ${miss.length}`}</strong>{pct>0&&<span>≈ {pct.toFixed(1)}% ABV</span>}{kr>0&&<span>≈ {kr.toFixed(0)} kr</span>}</div>{miss.length>0&&<div className="missingline">{miss.slice(0,3).map(i=><span key={i.ingredient}>{i.ingredient} +{Math.ceil(i.missing_ml)} ml</span>)}</div>}<div className="ingredients">{x.ingredients.map((i,n)=><span key={n} className={(totals[i.ingredient]||0)<i.amount_ml?'bad':''}>{i.ingredient} <b>{i.amount_ml} ml</b></span>)}</div>{(x.glass||x.garnish||x.instructions)&&<details className="recipeDetails" onClick={e=>e.stopPropagation()}><summary>Oppskrift</summary>{x.glass&&<p><b>Glass:</b> {x.glass}</p>}{x.garnish&&<p><b>Garnityr:</b> {x.garnish}</p>}{x.instructions&&<p>{x.instructions}</p>}</details>}{n>0?<button className="make" onClick={e=>{e.stopPropagation();make(x)}}>Lag drinken <span>· trekk automatisk fra flaskene</span></button>:<button className="missingbtn" onClick={e=>{e.stopPropagation();openMissing(x)}}><Plus/>Se og legg til det som mangler</button>}</div></article>})}</div>
    {filtered.length===0&&<div className="empty"><Search/><h3>Ingen lagrede treff</h3><p>Velg et forslag over for å legge drinken til.</p></div>}
   </section>}
 
