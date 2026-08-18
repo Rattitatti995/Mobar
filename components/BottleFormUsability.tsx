@@ -15,17 +15,82 @@ function labelInput(form:HTMLFormElement,prefix:string){
  return label?.querySelector('input') as HTMLInputElement|null
 }
 
-function lookupIngredient(product:any){
- if(product?.ingredient)return String(product.ingredient)
- const text=`${product?.name||''} ${product?.brand||''}`.toLocaleLowerCase('nb-NO')
- if(/\bpisang\s+ambon\b/.test(text))return 'Pisang Ambon'
+function norm(value:any){
+ return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('nb-NO').replace(/[^a-z0-9]+/g,' ').trim()
+}
+
+function cleanProductName(value:any){
+ return String(value||'')
+  .replace(/\b\d+(?:[.,]\d+)?\s*%\s*(?:vol\.?|alc\.?)?/gi,'')
+  .replace(/\b\d+(?:[.,]\d+)?\s*(?:ml|cl|l)\b/gi,'')
+  .replace(/\s+/g,' ')
+  .replace(/[-,]\s*$/g,'')
+  .trim()
+}
+
+function ruleIngredient(product:any){
+ const text=`${product?.name||''} ${product?.brand||''} ${product?.categories||''}`.toLocaleLowerCase('nb-NO')
+ const rules:[RegExp,string][]=[
+  [/(pisang ambon|banana liqueur|bananlikør)/,'Pisang Ambon'],[/\bmidori\b|melon liqueur|melonlikør/,'Midori'],[/passo[aã]|passion fruit liqueur|pasjonsfruktlikør/,'Passoa'],
+  [/\bchambord\b|raspberry liqueur|bringebærlikør/,'Chambord raspberry liqueur'],[/\bdrambuie\b/,'Drambuie'],[/\bfrangelico\b|hazelnut liqueur|hasselnøttlikør/,'Frangelico'],
+  [/southern comfort/,'Southern Comfort'],[/\bgalliano\b/,'Galliano'],[/licor 43/,'Licor 43'],[/green chartreuse/,'Green Chartreuse'],[/yellow chartreuse/,'Yellow Chartreuse'],[/\bchartreuse\b/,'Chartreuse'],
+  [/(baileys|irish cream)/,'Baileys'],[/(aquavit|akvavit|akevitt)/,'Akevitt'],[/\bvodka\b/,'Vodka'],[/sloe gin/,'Sloe gin'],[/\bgin\b/,'Gin'],
+  [/spiced rum/,'Spiced rum'],[/blackstrap rum/,'blackstrap rum'],[/gold rum/,'Gold rum'],[/(dark rum|black rum)/,'Dark rum'],[/(white rum|light rum|bacardi carta blanca)/,'White rum'],[/\brum\b/,'White rum'],
+  [/\btequila\b/,'Tequila'],[/\bmezcal\b/,'Mezcal'],[/\bbourbon\b/,'Bourbon'],[/(scotch|scotch whisky)/,'Scotch'],[/(whisky|whiskey)/,'Whiskey'],
+  [/\bcognac\b/,'Cognac'],[/\bbrandy\b/,'Brandy'],[/cointreau/,'Cointreau'],[/grand marnier/,'Grand Marnier'],
+  [/(blue cura[cç]ao)/,'Blue Curacao'],[/(triple sec|orange cura[cç]ao)/,'Triple sec'],[/campari/,'Campari'],[/aperol/,'Aperol'],[/amaretto|disaronno/,'Amaretto'],
+  [/(kahlua|kahlúa|coffee liqueur|kaffelikør)/,'Kahlúa'],[/(jägermeister|jagermeister)/,'Jägermeister'],[/malibu/,'Malibu'],[/peach schnapps|ferskenlikør/,'Peach schnapps'],
+  [/(dry vermouth|tørr vermut)/,'Vermouth dry'],[/(sweet vermouth|rosso vermouth|rød vermut)/,'Vermouth sweet'],[/(vermouth|vermut)/,'Vermouth sweet'],
+  [/(lime juice|limejuice|limesaft)/,'Lime juice'],[/(lemon juice|lemonjuice|sitronsaft)/,'Lemon juice'],[/(orange juice|appelsinjuice)/,'Orange juice'],
+  [/(pineapple juice|ananasjuice)/,'Pineapple juice'],[/(cranberry juice|tranebærjuice)/,'Cranberry juice'],[/(grapefruit juice|grapefruktjuice)/,'Grapefruit juice'],
+  [/(tomato juice|tomatjuice)/,'Tomato juice'],[/(ginger beer|ingefærøl)/,'Ginger beer'],[/ginger ale/,'Ginger ale'],[/(tonic water|\btonic\b)/,'Tonic water'],
+  [/(soda water|club soda|sparkling water|kullsyrevann)/,'Soda water'],[/\bcola\b|coca[- ]?cola|pepsi/,'Cola'],[/(saft|cordial|squash)/,'Saft'],
+  [/\bsambuca\b/,'Sambuca'],[/maraschino liqueur/,'Maraschino liqueur'],[/benedictine/,'Benedictine'],[/st[. ]?germain|elderflower liqueur/,'St. Germain'],
+  [/creme de cacao|crème de cacao/,'Creme de Cacao'],[/creme de cassis|crème de cassis/,'Creme de Cassis'],[/creme de menthe|crème de menthe/,'Green Creme de Menthe'],
+  [/\babsinthe\b/,'Absinthe'],[/\bcachaca\b|cachaça/,'Cachaca'],[/\bpisco\b/,'Pisco'],[/\bouzo\b/,'Ouzo'],[/\bpernod\b/,'Pernod'],[/\bricard\b/,'Ricard'],
+ ]
+ for(const [re,value] of rules)if(re.test(text))return value
  return ''
+}
+
+function ingredientFromOptions(form:HTMLFormElement,product:any){
+ const list=form.querySelector<HTMLDataListElement>('#ingredient-list')
+ if(!list)return ''
+ const hay=norm(`${product?.name||''} ${product?.brand||''} ${product?.categories||''}`)
+ if(!hay)return ''
+ const options=[...list.querySelectorAll('option')].map(o=>o.value.trim()).filter(Boolean)
+ const ranked=options
+  .map(value=>({value,n: norm(value)}))
+  .filter(x=>x.n.length>=3&&(` ${hay} `.includes(` ${x.n} `)||hay.includes(x.n)))
+  .sort((a,b)=>b.n.length-a.n.length)
+ return ranked[0]?.value||''
+}
+
+function lookupIngredient(form:HTMLFormElement,product:any){
+ if(product?.ingredient)return String(product.ingredient)
+ const byRule=ruleIngredient(product)
+ if(byRule)return byRule
+ const byOptions=ingredientFromOptions(form,product)
+ if(byOptions)return byOptions
+ const text=`${product?.name||''} ${product?.categories||''}`.toLocaleLowerCase('nb-NO')
+ if(/(liqueur|liquor|likør|likor|schnapps)/.test(text))return 'Likør'
+ if(/\bcider\b/.test(text))return 'Cider'
+ if(/\bbeer\b|\bøl\b/.test(text))return 'Beer'
+ if(/\b(red|white|rose|rosé|sparkling) wine\b|\bvin\b/.test(text))return 'Wine'
+ return cleanProductName(product?.name||product?.brand)
 }
 
 function lookupBrand(product:any,ingredient:string){
  if(product?.brand)return String(product.brand).split(',')[0].trim()
- if(ingredient==='Pisang Ambon')return 'Pisang Ambon'
- return ''
+ const name=cleanProductName(product?.name)
+ if(!name)return ''
+ if(ingredient&&norm(name)===norm(ingredient))return name
+ if(ingredient){
+  const words=new Set(norm(ingredient).split(/\s+/).filter(Boolean))
+  const remaining=name.split(/\s+/).filter(word=>!words.has(norm(word))&&!/^(original|premium|dry|liqueur|likør|vodka|gin|rum)$/i.test(word))
+  if(remaining.length)return remaining.slice(0,3).join(' ')
+ }
+ return name
 }
 
 export default function BottleFormUsability(){
@@ -80,11 +145,11 @@ export default function BottleFormUsability(){
     ].filter(Boolean).join(' og ')
     const sources=[data.vinmonopolet_configured&&'Vinmonopolet',data.kassalapp_configured&&'Kassalapp','Open Food Facts'].filter(Boolean).join(', ')
     const dbText=problems?`${problems}. De øvrige kildene kjenner heller ikke varen.`:`${sources} kjenner ikke varen ennå.`
-    setLookupStatus(form,`${dbText} Velg type og fyll inn varen én gang. Når du lagrer flasken med denne strekkoden, vil MoBar kjenne den igjen automatisk neste gang.`,kassProblem||vinoProblem?'error':'warn')
+    setLookupStatus(form,`${dbText} Dette er en ukjent strekkode, så kontroller eller fyll inn varen før du lagrer. Når den er lagret, lærer MoBar strekkoden til neste gang.`,kassProblem||vinoProblem?'error':'warn')
     return
    }
    const p=data.product||{}
-   const ingredient=lookupIngredient(p)
+   const ingredient=lookupIngredient(form,p)
    const inferredBrand=lookupBrand(p,ingredient)
    if(ingredient)setIngredient(form,ingredient)
    const brand=labelInput(form,'Merke')
@@ -117,9 +182,9 @@ export default function BottleFormUsability(){
     (kassStatus.startsWith('http_')||kassStatus==='exception')&&`Kassalapp feilet (${data.kassalapp_error||kassStatus})`,
    ].filter(Boolean):[]
    const upstreamFallback=fallbackProblems.length?` ${fallbackProblems.join(' og ')}, så MoBar brukte Open Food Facts som reserve.`:''
-   if(data.source!=='mobar'&&!ingredient){
+   if(!ingredient){
     const name=p.name?` (${p.name})`:''
-    setLookupStatus(form,`Varen ble funnet i ${source}${name}, men MoBar kunne ikke avgjøre flasketypen sikkert. Velg riktig type manuelt og kontroller resten før du lagrer.${marketHint}${upstreamFallback}`,'warn')
+    setLookupStatus(form,`Varen ble funnet i ${source}${name}, men kilden manglet nok produkttekst til å sette type automatisk. Kontroller varen før du lagrer.${marketHint}${upstreamFallback}`,'warn')
    }else{
     setLookupStatus(form,`Vare funnet fra ${source}${filled?` · fylte inn ${filled}`:''}. Kontroller opplysningene før du lagrer.${marketHint}${upstreamFallback}`,(upstreamFallback?'warn':'ok'))
    }
@@ -175,7 +240,7 @@ export default function BottleFormUsability(){
    const list=form.querySelector<HTMLDataListElement>('#ingredient-list')
    if(!label||!list||label.querySelector('.ingredient-picker'))return
    const base=[...list.querySelectorAll('option')].map(o=>o.value).filter(Boolean)
-   const options=[...new Set(['Saft','Pisang Ambon',...base])].sort((a,b)=>a.localeCompare(b,'nb',{sensitivity:'base'}))
+   const options=[...new Set(['Saft','Likør','Cider','Beer','Wine',...base])].sort((a,b)=>a.localeCompare(b,'nb',{sensitivity:'base'}))
    input.required=false
    input.classList.add('ingredient-react-input')
    input.style.display='none'
